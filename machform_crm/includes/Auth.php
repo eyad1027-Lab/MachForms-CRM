@@ -2,6 +2,7 @@
 /**
  * Machform CRM - Authentication Class
  * Handle user authentication and authorization
+ * Uses config-based credentials since Machform doesn't have a users table
  */
 
 class Auth {
@@ -12,21 +13,18 @@ class Auth {
     }
     
     /**
-     * Login user
+     * Login user with config-based credentials
      */
     public function login($username, $password) {
-        // Check if user exists in machform users table
-        // For now, we'll create a simple auth system
-        // In production, integrate with existing user system
+        // Get credentials from config file
+        $configUsername = defined('CRM_USERNAME') ? CRM_USERNAME : 'admin';
+        $configPassword = defined('CRM_PASSWORD') ? CRM_PASSWORD : 'admin123';
         
-        $sql = "SELECT * FROM users WHERE username = :username LIMIT 1";
-        $user = $this->db->fetchOne($sql, ['username' => $username]);
-        
-        if ($user && password_verify($password, $user['password'])) {
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['username'] = $user['username'];
-            $_SESSION['email'] = $user['email'];
-            $_SESSION['role'] = $user['role'] ?? 'admin';
+        if ($username === $configUsername && $password === $configPassword) {
+            $_SESSION['user_id'] = 1;
+            $_SESSION['username'] = $username;
+            $_SESSION['email'] = 'admin@localhost';
+            $_SESSION['role'] = 'admin';
             $_SESSION['logged_in'] = true;
             $_SESSION['login_time'] = time();
             
@@ -99,7 +97,7 @@ class Auth {
      */
     public function requireLogin() {
         if (!$this->isLoggedIn()) {
-            header('Location: /machform_crm/login.php');
+            header('Location: login.php');
             exit;
         }
     }
@@ -110,69 +108,25 @@ class Auth {
     public function requireAdmin() {
         $this->requireLogin();
         if (!$this->isAdmin()) {
-            header('Location: /machform_crm/index.php?error=unauthorized');
+            header('Location: index.php?error=unauthorized');
             exit;
         }
-    }
-    
-    /**
-     * Register new user
-     */
-    public function register($username, $email, $password, $role = 'user') {
-        // Check if username already exists
-        $checkSql = "SELECT id FROM users WHERE username = :username OR email = :email LIMIT 1";
-        $existing = $this->db->fetchOne($checkSql, ['username' => $username, 'email' => $email]);
-        
-        if ($existing) {
-            return ['success' => false, 'message' => 'Username or email already exists'];
-        }
-        
-        $hashedPassword = password_hash($password, PASSWORD_BCRYPT, ['cost' => HASH_COST]);
-        
-        $data = [
-            'username' => $username,
-            'email' => $email,
-            'password' => $hashedPassword,
-            'role' => $role,
-            'created_at' => date(DATETIME_FORMAT)
-        ];
-        
-        try {
-            $userId = $this->db->insert('users', $data);
-            return ['success' => true, 'user_id' => $userId];
-        } catch (Exception $e) {
-            return ['success' => false, 'message' => $e->getMessage()];
-        }
-    }
-    
-    /**
-     * Update user password
-     */
-    public function updatePassword($userId, $newPassword) {
-        $hashedPassword = password_hash($newPassword, PASSWORD_BCRYPT, ['cost' => HASH_COST]);
-        
-        return $this->db->update(
-            'users',
-            ['password' => $hashedPassword],
-            'id = :id',
-            ['id' => $userId]
-        );
     }
     
     /**
      * Generate CSRF token
      */
     public function generateCsrfToken() {
-        if (empty($_SESSION[CSRF_TOKEN_NAME])) {
-            $_SESSION[CSRF_TOKEN_NAME] = bin2hex(random_bytes(32));
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         }
-        return $_SESSION[CSRF_TOKEN_NAME];
+        return $_SESSION['csrf_token'];
     }
     
     /**
      * Verify CSRF token
      */
     public function verifyCsrfToken($token) {
-        return isset($_SESSION[CSRF_TOKEN_NAME]) && hash_equals($_SESSION[CSRF_TOKEN_NAME], $token);
+        return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
     }
 }
